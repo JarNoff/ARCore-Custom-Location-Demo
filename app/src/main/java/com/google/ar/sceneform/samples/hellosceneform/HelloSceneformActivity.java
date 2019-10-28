@@ -15,19 +15,27 @@
  */
 package com.google.ar.sceneform.samples.hellosceneform;
 
+import android.Manifest;
 import android.app.Activity;
 import android.app.ActivityManager;
+import android.app.AlertDialog;
 import android.content.Context;
+import android.content.DialogInterface;
+import android.content.pm.PackageManager;
 import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
+import android.location.Criteria;
 import android.location.Location;
 import android.location.LocationManager;
 import android.os.Build;
 import android.os.Handler;
 import android.os.Build.VERSION_CODES;
 import android.os.Bundle;
+import android.support.annotation.NonNull;
+import android.support.v4.app.ActivityCompat;
+import android.support.v4.content.ContextCompat;
 import android.support.v7.app.AppCompatActivity;
 import android.util.Log;
 import android.view.Gravity;
@@ -38,6 +46,7 @@ import android.widget.Toast;
 
 import com.google.android.gms.location.FusedLocationProviderClient;
 import com.google.android.gms.location.LocationServices;
+import com.google.android.gms.tasks.OnSuccessListener;
 import com.google.ar.core.Anchor;
 import com.google.ar.sceneform.Camera;
 import com.google.ar.core.HitResult;
@@ -55,6 +64,9 @@ import com.google.ar.sceneform.ux.TransformableNode;
 import com.google.android.gms.maps.model.LatLng;
 
 import java.lang.reflect.Array;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 import java.util.Vector;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
@@ -67,6 +79,9 @@ import io.nlopez.smartlocation.OnLocationUpdatedListener;
  */
 public class HelloSceneformActivity extends AppCompatActivity implements SensorEventListener {
     private FusedLocationProviderClient fusedLocationClient;
+    private final static int REQUEST_CODE_ASK_PERMISSIONS = 1;
+    private static final String[] REQUIRED_SDK_PERMISSIONS = new String[] {
+            Manifest.permission.ACCESS_FINE_LOCATION };
   private static final String TAG = HelloSceneformActivity.class.getSimpleName();
   private static final double MIN_OPENGL_VERSION = 3.0;
   private int azimuth = 0;
@@ -121,16 +136,27 @@ public class HelloSceneformActivity extends AppCompatActivity implements SensorE
           final Runnable r = new Runnable() {
               @Override
               public void run() {
-                  //Location keeps returning null, making the app crash
-                  //Get location from user.
-                  //Hard coded for now.
-                  //Location location = SmartLocation.with(this).location().getLastLocation();
-                  Location location = new Location("");
-                  location.setLatitude(34.002989);
-                  location.setLongitude(-81.0160088);
-                  placeARByLocation(location, new LatLng(34.002989, -81.0160088), "Vanak");
-                  placeARByLocation(location, new LatLng(34.003200, -81.020000), "Mellat");
-                  placeARByLocation(location, new LatLng(34.001500, -81.014000), "Sattari");
+                  fusedLocationClient.getLastLocation()
+                          .addOnSuccessListener(HelloSceneformActivity.this, new OnSuccessListener<Location>() {
+                              @Override
+                              public void onSuccess(Location location) {
+                                  // Got last known location. In some rare situations this can be null.
+                                  if (location != null) {
+                                      // Logic to handle location object
+
+                                      //Add in something here to not place AR objects if they are not in a good location.
+                                      //Or get list of possible locations from firebase and check which are in range here.
+
+                                      placeARByLocation(location, new LatLng(34.002989, -81.0160088));
+                                      placeARByLocation(location, new LatLng(34.003200, -81.020000));
+                                      placeARByLocation(location, new LatLng(34.001500, -81.014000));
+                                  }
+                                  else
+                                  {
+                                      Log.v("Warning:", "Failed to get location");
+                                  }
+                              }
+                          });
               }
           };
           handler.postDelayed(r, 2000);
@@ -148,12 +174,10 @@ public class HelloSceneformActivity extends AppCompatActivity implements SensorE
   // FutureReturnValueIgnored is not valid
   protected void onCreate(Bundle savedInstanceState) {
     super.onCreate(savedInstanceState);
-
     if (!checkIsSupportedDeviceOrFinish(this)) {
       return;
     }
-
-    setContentView(R.layout.activity_ux);
+      setContentView(R.layout.activity_ux);
 
     fusedLocationClient = LocationServices.getFusedLocationProviderClient(this);
 
@@ -165,32 +189,6 @@ public class HelloSceneformActivity extends AppCompatActivity implements SensorE
     arFragment.getPlaneDiscoveryController().setInstructionView(null);
     scene = arFragment.getArSceneView().getScene();
     camera = scene.getCamera();
-    // When you build a Renderable, Sceneform loads its resources in the background while returning
-    // a CompletableFuture. Call thenAccept(), handle(), or check isDone() before calling get().
-     // ViewRenderable.builder().setView(this, R.layout.samplenode).build().thenAccept((renderable) -> {
-
-      //});
-
-    /*
-    arFragment.setOnTapArPlaneListener(
-        (HitResult hitResult, Plane plane, MotionEvent motionEvent) -> {
-          if (andyRenderable == null) {
-            return;
-          }
-
-          // Create the Anchor.
-          Anchor anchor = hitResult.createAnchor();
-          AnchorNode anchorNode = new AnchorNode(anchor);
-          anchorNode.setParent(arFragment.getArSceneView().getScene());
-
-          // Create the transformable andy and add it to the anchor.
-          TransformableNode andy = new TransformableNode(arFragment.getTransformationSystem());
-          andy.setParent(anchorNode);
-          andy.setRenderable(andyRenderable);
-          andy.select();
-        });
-
-     */
   }
 
   /**
@@ -240,21 +238,6 @@ public class HelloSceneformActivity extends AppCompatActivity implements SensorE
           Quaternion lookRotation = Quaternion.lookRotation(direction, Vector3.up());
           node.setWorldRotation(lookRotation);
       });
-      /*
-      View inflatedView = getLayoutInflater().inflate(R.layout.samplenode, null);
-      ImageView img = (ImageView)inflatedView.findViewById(R.id.imageView);
-      //I need food.
-      AnchorNode node = new AnchorNode();
-      node.setRenderable(exampleLayout->thenode = exampleLayout);
-      scene.addChild(node);
-      node.setWorldPosition(new Vector3(x, y, z));
-
-      Vector3 cameraPosition = scene.getCamera().getWorldPosition();
-      Vector3 direction = Vector3.subtract(cameraPosition, node.getWorldPosition());
-      Quaternion lookRotation = Quaternion.lookRotation(direction, Vector3.up());
-      node.setWorldRotation(lookRotation);
-
-       */
   }
 
   private double bearing(Location A, Location B)
@@ -274,7 +257,7 @@ public class HelloSceneformActivity extends AppCompatActivity implements SensorE
       return 15.0;
   }
 
-  private void placeARByLocation(Location myLocation, LatLng target, String name)
+  private void placeARByLocation(Location myLocation, LatLng target)
   {
     Location targetLoc = new Location("");
     targetLoc.setLatitude(target.latitude);
@@ -341,4 +324,7 @@ public class HelloSceneformActivity extends AppCompatActivity implements SensorE
       super.onResume();
       startSensor();
   }
+
+
+
 }
